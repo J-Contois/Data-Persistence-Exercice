@@ -1,60 +1,89 @@
-﻿using System.Text.Json;
+﻿using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 
 public static class SaveService
 {
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
-    public static SaveGame LoadOrDefault(string path)
-    {
-        try
-        {
-            if (!File.Exists(path))
-            {
-                Console.WriteLine("Aucune sauvegarde trouvée. Création d'une sauvegarde par défaut.");
-                var def = SaveGame.Default();
-                Save(path, def);
-                return def;
-            }
-
-            var json = File.ReadAllText(path);
-            var loaded = JsonSerializer.Deserialize<SaveGame>(json, Options);
-
-            if (loaded is null)
-            {
-                Console.WriteLine("Sauvegarde invalide. Réinitialisation.");
-                var def = SaveGame.Default();
-                Save(path, def);
-                return def;
-            }
-
-            return loaded;
-        }
-        catch (JsonException)
-        {
-            Console.WriteLine("JSON corrompu. Réinitialisation.");
-            var def = SaveGame.Default();
-            Save(path, def);
-            return def;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Erreur d'accès fichier: {ex.Message}");
-            var def = SaveGame.Default();
-            Save(path, def);
-            return def;
-        }
-    }
-
-    public static void Save(string path, SaveGame save)
+    public static void SaveEncrypted(string path, SaveGame save, string password)
     {
         save.LastSaveUtc = DateTime.UtcNow;
         var dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
-        var tmp = path + ".tmp";
+        // Sérialisation JSON
         var json = JsonSerializer.Serialize(save, Options);
+        byte[] plaintext = Encoding.UTF8.GetBytes(json);
 
-        File.WriteAllText(tmp, json);
-        File.Move(tmp, path, overwrite: true);
+        // Génération du sel et dérivation de la clé
+        byte[] salt = RandomNumberGenerator.GetBytes(16);
+        var key = new Rfc2898DeriveBytes(password, salt, 100_000, HashAlgorithmName.SHA256).GetBytes(32);
+
+        // Chiffrement AES-GCM
+        byte[] nonce = RandomNumberGenerator.GetBytes(12);
+        byte[] ciphertext = new byte[plaintext.Length];
+        byte[] tag = new byte[16];
+
+        using (var aes = new AesGcm(key))
+        {
+            aes.Encrypt(nonce, plaintext, ciphertext, tag);
+        }
+
+        var payload = new EncryptedPayload
+        {
+            Salt = Convert.ToBase64String(salt),
+            Nonce = Convert.ToBase64String(nonce),
+            Tag = Convert.ToBase64String(tag),
+            Data = Convert.ToBase64String(ciphertext)
+        };
+
+        var encryptedJson = JsonSerializer.Serialize(payload, Options);
+        File.WriteAllText(path, encryptedJson);
+    }
+
+    public static SaveGame? LoadEncrypted(string path, string password)
+    {
+        try
+        {
+            if (!File.Exists(path))
+            {
+                Console.WriteLine("Aucune sauvegarde chiffrée trouvée.");
+                return null;
+            }
+
+            var encryptedContent = File.ReadAllText(path);
+            var payload = JsonSerializer.Deserialize<EncryptedPayload>(encryptedContent);
+
+            if (payload == null)
+                throw new Exception("Fichier de sauvegarde corrompu.");
+
+            byte[] salt = Convert.FromBase64String(payload.Salt);
+            byte[] nonce = Convert.FromBase64String(payload.Nonce);
+            byte[] tag = Convert.FromBase64String(payload.Tag);
+            byte[] ciphertext = Convert.FromBase64String(payload.Data);
+
+            var key = new Rfc2898DeriveBytes(password, salt, 100_000, HashAlgorithmName.SHA256).GetBytes(32);
+            byte[] decrypted = new byte[ciphertext.Length];
+
+            using (var aes = new AesGcm(key))
+            {
+                aes.Decrypt(nonce, ciphertext, tag, decrypted);
+            }
+
+            string json = Encoding.UTF8.GetString(decrypted);
+            var save = JsonSerializer.Deserialize<SaveGame>(json, Options);
+            return save;
+        }
+        catch (CryptographicException)
+        {
+            Console.WriteLine("Mot de passe incorrect ou fichier corrompu.");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erreur lors du chargement : {ex.Message}");
+            return null;
+        }
     }
 }

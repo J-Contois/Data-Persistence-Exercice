@@ -1,27 +1,29 @@
 ﻿public class Game
 {
     private readonly string _saveDir = "Saves";
-    private readonly string _savePath;
+    private string _savePath;
     private SaveGame _save;
     private readonly Menu _menu;
 
     public Game()
     {
         Directory.CreateDirectory(_saveDir);
-        _savePath = Path.Combine(_saveDir, "save.json");
+        _savePath = Path.Combine(_saveDir, "save.enc");
 
-        _save = SaveService.LoadOrDefault(_savePath);
+        _save = SaveGame.Default();
         _menu = new Menu();
+    }
+
+    private string GetSavePath(string username)
+    {
+        return Path.Combine(_saveDir, $"{username}.enc");
     }
 
     public void Run()
     {
-        Console.WriteLine($"Sauvegarde chargée pour: {_save.Player.Username} | Niveau {_save.Player.Level} | Score {_save.Player.Score}");
-
         bool running = true;
         while (running)
         {
-            _menu.DisplayLogin();
             _menu.Display();
 
             switch (_menu.GetChoice())
@@ -51,10 +53,18 @@
 
     private void StartNewGame()
     {
-        Console.Write("Nom du joueur: ");
-        var name = Console.ReadLine();
-        Console.WriteLine("Entrez votre mot de passe :");
-        string pwd = Console.ReadLine();
+        var (name, pwd) = _menu.DisplayLogin();
+        _savePath = GetSavePath(name);
+
+        if (File.Exists(_savePath))
+        {
+            var existingSave = SaveService.LoadEncrypted(_savePath, pwd);
+            if (existingSave != null && existingSave.Player.Username == name)
+            {
+                Console.WriteLine("Ce nom d'utilisateur existe déjà. Veuillez en choisir un autre.");
+                return;
+            }
+        }
 
         var (hash, salt) = PasswordService.HashPassword(pwd);
         Console.WriteLine($"Hash : {hash}");
@@ -72,8 +82,18 @@
 
     private void LoadGame()
     {
-        _save = SaveService.LoadOrDefault(_savePath);
-        Console.WriteLine($"Chargé: {_save.Player.Username} | Niveau {_save.Player.Level} | Score {_save.Player.Score}");
+        var (name, pwd) = _menu.DisplayLogin();
+        _savePath = GetSavePath(name);
+        var loaded = SaveService.LoadEncrypted(_savePath, pwd);
+        if (loaded != null)
+        {
+            _save = loaded;
+            Console.WriteLine($"Chargé: {_save.Player.Username} | Niveau {_save.Player.Level} | Score {_save.Player.Score}");
+        }
+        else
+        {
+            Console.WriteLine("Impossible de charger la sauvegarde.");
+        }
     }
 
     private void PlayGame()
@@ -84,7 +104,9 @@
 
     private void SaveGameToFile()
     {
-        SaveService.Save(_savePath, _save);
-        Console.WriteLine($"Sauvegardé ✓ ({_save.LastSaveUtc:yyyy-MM-dd HH:mm:ss} UTC)");
+        Console.Write("Mot de passe pour chiffrer la sauvegarde : ");
+        string pwd = Console.ReadLine();
+        SaveService.SaveEncrypted(_savePath, _save, pwd);
+        Console.WriteLine($"Sauvegardé ({_save.LastSaveUtc:yyyy-MM-dd HH:mm:ss} UTC)");
     }
 }

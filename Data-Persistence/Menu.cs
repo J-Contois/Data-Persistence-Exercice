@@ -10,13 +10,17 @@
 
 public class Menu
 {
-    public void DisplayLogin()
+
+    public (string username, string password) DisplayLogin()
     {
         Console.WriteLine("Veuillez vous connecter à votre compte.");
-        Console.WriteLine("Entrez votre nom d'utilisateur :");
+        Console.Write("Entrez votre nom d'utilisateur : ");
+        string username = Console.ReadLine() ?? "";
 
-        Console.WriteLine("Entrez votre mot de passe :");
-        string pwd = Console.ReadLine();
+        Console.Write("Entrez votre mot de passe : ");
+        string password = Console.ReadLine() ?? "";
+
+        return (username, password);
     }
 
     public void Display()
