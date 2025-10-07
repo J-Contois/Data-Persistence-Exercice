@@ -10,6 +10,15 @@
 
 public class Menu
 {
+    public void DisplayLogin()
+    {
+        Console.WriteLine("Veuillez vous connecter à votre compte.");
+        Console.WriteLine("Entrez votre nom d'utilisateur :");
+
+        Console.WriteLine("Entrez votre mot de passe :");
+        string pwd = Console.ReadLine();
+    }
+
     public void Display()
     {
         Console.WriteLine("\n=== Menu ===");

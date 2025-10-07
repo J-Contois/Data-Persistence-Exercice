@@ -16,11 +16,12 @@
 
     public void Run()
     {
-        Console.WriteLine($"Sauvegarde chargée pour: {_save.Player.PlayerName} | Niveau {_save.Player.Level} | Score {_save.Player.Score}");
+        Console.WriteLine($"Sauvegarde chargée pour: {_save.Player.Username} | Niveau {_save.Player.Level} | Score {_save.Player.Score}");
 
         bool running = true;
         while (running)
         {
+            _menu.DisplayLogin();
             _menu.Display();
 
             switch (_menu.GetChoice())
@@ -52,14 +53,27 @@
     {
         Console.Write("Nom du joueur: ");
         var name = Console.ReadLine();
-        _save = SaveGame.Default(name);
-        Console.WriteLine($"Nouvelle partie : {_save.Player.PlayerName} (Score {_save.Player.Score})");
+        Console.WriteLine("Entrez votre mot de passe :");
+        string pwd = Console.ReadLine();
+
+        var (hash, salt) = PasswordService.HashPassword(pwd);
+        Console.WriteLine($"Hash : {hash}");
+        Console.WriteLine($"Salt : {salt}");
+
+        Console.Write("\nTest de vérification - retapez le mot de passe : ");
+        string input = Console.ReadLine() ?? "";
+
+        bool ok = PasswordService.VerifyPassword(input, hash, salt);
+        Console.WriteLine(ok ? "Mot de passe correct" : "Mot de passe incorrect");
+
+        _save = SaveGame.Default(name, hash, salt);
+        Console.WriteLine($"Nouvelle partie : {_save.Player.Username} (Score {_save.Player.Score})");
     }
 
     private void LoadGame()
     {
         _save = SaveService.LoadOrDefault(_savePath);
-        Console.WriteLine($"Chargé: {_save.Player.PlayerName} | Niveau {_save.Player.Level} | Score {_save.Player.Score}");
+        Console.WriteLine($"Chargé: {_save.Player.Username} | Niveau {_save.Player.Level} | Score {_save.Player.Score}");
     }
 
     private void PlayGame()
