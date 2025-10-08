@@ -1,22 +1,16 @@
-﻿public class Game
+﻿using Data_Persistence.Repositories;
+
+public class Game
 {
-    private readonly string _saveDir = "Saves";
-    private string _savePath;
-    private SaveGame _save;
+    public MongoContext Context { get; }
     private readonly Menu _menu;
 
     public Game()
     {
-        Directory.CreateDirectory(_saveDir);
-        _savePath = Path.Combine(_saveDir, "save.enc");
-
-        _save = SaveGame.Default();
+        Context = new MongoContext("mongodb://localhost:27017", "game");
+        profiles = new ProfileRepository(ctx);
+        saves = new SaveGameRepository(ctx);
         _menu = new Menu();
-    }
-
-    private string GetSavePath(string username)
-    {
-        return Path.Combine(_saveDir, $"{username}.enc");
     }
 
     public void Run()
@@ -54,26 +48,22 @@
     private void StartNewGame()
     {
         var (name, pwd) = _menu.DisplayLogin();
-        _savePath = GetSavePath(name);
 
-        if (File.Exists(_savePath))
+        var existingSave = SaveService.LoadEncrypted(SavePath, pwd);
+        if (existingSave != null && existingSave.Player.Username == name)
         {
-            var existingSave = SaveService.LoadEncrypted(_savePath, pwd);
-            if (existingSave != null && existingSave.Player.Username == name)
-            {
-                Console.WriteLine("Ce nom d'utilisateur existe déjà. Veuillez en choisir un autre.");
-                return;
-            }
+            Console.WriteLine("Ce nom d'utilisateur existe déjà. Veuillez en choisir un autre.");
+            return;
         }
 
-        var (hash, salt) = PasswordService.HashPassword(pwd);
+        var (hash, salt) = Pbkdf2.HashPassword(pwd);
         Console.WriteLine($"Hash : {hash}");
         Console.WriteLine($"Salt : {salt}");
 
         Console.Write("\nTest de vérification - retapez le mot de passe : ");
         string input = Console.ReadLine() ?? "";
 
-        bool ok = PasswordService.VerifyPassword(input, hash, salt);
+        bool ok = Pbk.VerifyPassword(input, hash, salt);
         Console.WriteLine(ok ? "Mot de passe correct" : "Mot de passe incorrect");
 
         _save = SaveGame.Default(name, hash, salt);
@@ -83,8 +73,7 @@
     private void LoadGame()
     {
         var (name, pwd) = _menu.DisplayLogin();
-        _savePath = GetSavePath(name);
-        var loaded = SaveService.LoadEncrypted(_savePath, pwd);
+        var loaded = SaveService.LoadEncrypted(SavePath, pwd);
         if (loaded != null)
         {
             _save = loaded;
@@ -105,8 +94,8 @@
     private void SaveGameToFile()
     {
         Console.Write("Mot de passe pour chiffrer la sauvegarde : ");
-        string pwd = Console.ReadLine();
-        SaveService.SaveEncrypted(_savePath, _save, pwd);
+        var pwd = Console.ReadLine();
+        SaveService.SaveEncrypted(SavePath, _save, pwd);
         Console.WriteLine($"Sauvegardé ({_save.LastSaveUtc:yyyy-MM-dd HH:mm:ss} UTC)");
     }
 }

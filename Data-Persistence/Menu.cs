@@ -10,7 +10,6 @@
 
 public class Menu
 {
-
     public (string username, string password) DisplayLogin()
     {
         Console.WriteLine("Veuillez vous connecter à votre compte.");

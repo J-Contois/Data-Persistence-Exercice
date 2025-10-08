@@ -6,17 +6,14 @@ public static class SaveService
 {
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
-    public static void SaveEncrypted(string path, SaveGame save, string password)
+    public static void SaveEncrypted(Profile profile, string password)
     {
-        save.LastSaveUtc = DateTime.UtcNow;
-        var dir = Path.GetDirectoryName(path);
-        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-
         // Sérialisation JSON
-        var json = JsonSerializer.Serialize(save, Options);
+        var json = JsonSerializer.Serialize(profile, Options);
         byte[] plaintext = Encoding.UTF8.GetBytes(json);
 
         // Génération du sel et dérivation de la clé
+        byte[] passwordHash = Convert.FromBase64String(profile.PasswordHashB64);
         byte[] salt = RandomNumberGenerator.GetBytes(16);
         var key = new Rfc2898DeriveBytes(password, salt, 100_000, HashAlgorithmName.SHA256).GetBytes(32);
 
@@ -39,10 +36,11 @@ public static class SaveService
         };
 
         var encryptedJson = JsonSerializer.Serialize(payload, Options);
-        File.WriteAllText(path, encryptedJson);
+
+        SaveCollection.InsertOne(profile);
     }
 
-    public static SaveGame? LoadEncrypted(string path, string password)
+    public static SaveGame? LoadEncrypted(Profile profile, string password)
     {
         try
         {
