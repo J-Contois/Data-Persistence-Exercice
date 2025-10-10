@@ -2,18 +2,20 @@
 using System.Text;
 using System.Text.Json;
 
+using Data_Persistence.Models;
+
 public static class SaveService
 {
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
-    public static void SaveEncrypted(Profile profile, string password)
+    public static void SaveEncrypted(string password)
     {
         // Sérialisation JSON
-        var json = JsonSerializer.Serialize(profile, Options);
+        var json = JsonSerializer.Serialize(password, Options);
         byte[] plaintext = Encoding.UTF8.GetBytes(json);
 
         // Génération du sel et dérivation de la clé
-        byte[] passwordHash = Convert.FromBase64String(profile.PasswordHashB64);
+        byte[] passwordHash = Convert.FromBase64String(password);
         byte[] salt = RandomNumberGenerator.GetBytes(16);
         var key = new Rfc2898DeriveBytes(password, salt, 100_000, HashAlgorithmName.SHA256).GetBytes(32);
 
@@ -36,22 +38,13 @@ public static class SaveService
         };
 
         var encryptedJson = JsonSerializer.Serialize(payload, Options);
-
-        SaveCollection.InsertOne(profile);
     }
 
-    public static SaveGame? LoadEncrypted(Profile profile, string password)
+    public static string? LoadEncrypted(string password)
     {
         try
         {
-            if (!File.Exists(path))
-            {
-                Console.WriteLine("Aucune sauvegarde chiffrée trouvée.");
-                return null;
-            }
-
-            var encryptedContent = File.ReadAllText(path);
-            var payload = JsonSerializer.Deserialize<EncryptedPayload>(encryptedContent);
+            var payload = JsonSerializer.Deserialize<EncryptedPayload>(password);
 
             if (payload == null)
                 throw new Exception("Fichier de sauvegarde corrompu.");
@@ -71,7 +64,7 @@ public static class SaveService
 
             string json = Encoding.UTF8.GetString(decrypted);
             var save = JsonSerializer.Deserialize<SaveGame>(json, Options);
-            return save;
+            return passwordHash;
         }
         catch (CryptographicException)
         {

@@ -1,15 +1,19 @@
-﻿using Data_Persistence.Repositories;
+﻿using Data_Persistence.MongoDB;
+using Data_Persistence.Repositories;
+using Data_Persistence.Security;
 
 public class Game
 {
-    public MongoContext Context { get; }
+    private MongoContext _context;
     private readonly Menu _menu;
+    private ProfileRepository _profileRepository;
+    private SaveGameRepository _saveGameRepository;
 
     public Game()
     {
-        Context = new MongoContext("mongodb://localhost:27017", "game");
-        profiles = new ProfileRepository(ctx);
-        saves = new SaveGameRepository(ctx);
+        _context = MongoContext.CreateFromEnv();
+        _profileRepository = new ProfileRepository(_context);
+        _saveGameRepository = new SaveGameRepository(_context);
         _menu = new Menu();
     }
 
@@ -49,7 +53,8 @@ public class Game
     {
         var (name, pwd) = _menu.DisplayLogin();
 
-        var existingSave = SaveService.LoadEncrypted(SavePath, pwd);
+        string passwordHash = SaveService.LoadEncrypted(pwd);
+
         if (existingSave != null && existingSave.Player.Username == name)
         {
             Console.WriteLine("Ce nom d'utilisateur existe déjà. Veuillez en choisir un autre.");
